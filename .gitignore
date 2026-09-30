@@ -1,0 +1,4 @@
+node_modules/
+dist/
+*.vsix
+dev.code-workspace

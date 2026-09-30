@@ -1,0 +1,153 @@
+{
+  "name": "nokran",
+  "displayName": "Nokran",
+  "description": "Nokran: an MCP client chat for the source-code-vuln-poc harness. Scan code for vulnerabilities and ask questions about it over Streamable HTTP.",
+  "version": "0.4.0",
+  "publisher": "local",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "nokran",
+          "title": "Nokran",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "nokran": [
+        {
+          "type": "webview",
+          "id": "nokran.chat",
+          "name": "Chat"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "nokran.openChat",
+        "title": "Open Chat",
+        "category": "Nokran"
+      },
+      {
+        "command": "nokran.scanWorkspace",
+        "title": "Scan Workspace",
+        "category": "Nokran"
+      },
+      {
+        "command": "nokran.scanFile",
+        "title": "Scan Current File",
+        "category": "Nokran"
+      },
+      {
+        "command": "nokran.setApiKey",
+        "title": "Set API Key",
+        "category": "Nokran"
+      },
+      {
+        "command": "nokran.clearApiKey",
+        "title": "Clear API Key",
+        "category": "Nokran"
+      },
+      {
+        "command": "nokran.reconnect",
+        "title": "Reconnect to Server",
+        "category": "Nokran"
+      },
+      {
+        "command": "nokran.showLog",
+        "title": "Show Output Log",
+        "category": "Nokran"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "nokran.scanFile",
+          "group": "navigation@99",
+          "when": "resourceScheme == file"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Nokran",
+      "properties": {
+        "nokran.mcpBaseUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:8001/mcp",
+          "markdownDescription": "URL of the MCP server (the harness's `scan-mcp`), Streamable HTTP."
+        },
+        "nokran.apiKey": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "API key for the MCP server (its `MCP_API_KEY`), sent as `Authorization: Bearer <key>`.\n\nStored in plain text in `settings.json` (and synced by Settings Sync). To keep it out of settings, leave this empty and run **Nokran: Set API Key** instead, which uses VS Code's encrypted secret storage. When both are set, this setting wins."
+        },
+        "nokran.sourceMode": {
+          "type": "string",
+          "enum": [
+            "path",
+            "git",
+            "upload"
+          ],
+          "default": "path",
+          "enumDescriptions": [
+            "Send the local path. The server must run on this machine (or see the same disk).",
+            "Send the Git `origin` URL and current branch. The server clones what is pushed.",
+            "Zip the files and upload them. Works with any server; your code is sent to it."
+          ],
+          "markdownDescription": "How the server gets your code."
+        },
+        "nokran.maxUploadMB": {
+          "type": "number",
+          "default": 50,
+          "minimum": 1,
+          "markdownDescription": "Largest upload in `upload` mode, in MB (zipped). The server has its own limit, `MAX_UPLOAD_MB`."
+        },
+        "nokran.scanTimeoutMinutes": {
+          "type": "number",
+          "default": 30,
+          "minimum": 1,
+          "description": "How long a scan may run before it is cancelled."
+        },
+        "nokran.askTimeoutMinutes": {
+          "type": "number",
+          "default": 5,
+          "minimum": 1,
+          "description": "How long a question may take before it is cancelled."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "package": "npm run build -- --production && vsce package --no-dependencies --no-rewrite-relative-links",
+    "vscode:prepublish": "node esbuild.mjs --production"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.31.0",
+    "dompurify": "^3.4.16",
+    "fflate": "^0.8.3",
+    "marked": "^18.0.14"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^4.0.0",
+    "esbuild": "^0.28.2",
+    "jsdom": "^30.1.1",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.2"
+  }
+}

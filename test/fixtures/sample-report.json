@@ -1,0 +1,106 @@
+{
+  "repository_root": "/projects/DSVW",
+  "files_scanned": 12,
+  "candidates_found": 3,
+  "items": [
+    {
+      "id": "VULN-003",
+      "finding": {
+        "id": "F-003",
+        "file": "dsvw.py",
+        "line": 61,
+        "rule_id": "app.rules.semgrep.python-sqli-concat",
+        "vulnerability_type": "SQL Injection",
+        "scanner_severity": "WARNING",
+        "message": "A SQL statement built by string concatenation or interpolation reaches a database execute() call. If any part of that string is attacker-controlled the query can be rewritten. Use a parameterized query instead.",
+        "code_snippet": "                content = \"%s%s%s\" % (\"\" if not \"callback\" in params else \"%s(\" % params[\"callback\"], json.dumps(dict((_.findtext(\"username\"), _.findtext(\"surname\")) for _ in xml.etree.ElementTree.fromstring(USERS_XML).findall(\"user\"))), \"\" if not \"callback\" in params else \")\")\n            elif path == \"/login\":\n                found = bool(cursor.execute(\"SELECT * FROM users WHERE username='\" + re.sub(r\"[^\\w]\", \"\", params.get(\"username\", \"\")) + \"' AND password='\" + params.get(\"password\", \"\") + \"'\").fetchall())\n                cookie = \"SESSIONID=%s; path=/\" % \"\".join(random.choices(string.ascii_letters + string.digits, k=20)) if found else \"SESSIONID=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT\"\n                content += \"%s<meta http-equiv=\\\"Set-Cookie\\\" content=\\\"%s\\\">%s\" % (\"Welcome <b>%s</b>\" % re.sub(r\"[^\\w]\", \"\", params.get(\"username\", \"\")) if found else \"The username and/or password is incorrect\", cookie, \"<meta http-equiv=\\\"refresh\\\" content=\\\"1; url=/\\\"/>\" if found else \"\")"
+      },
+      "analysis": {
+        "vulnerability_type": "SQL Injection",
+        "status": "Likely Vulnerable",
+        "severity": "Critical",
+        "confidence": "High",
+        "source": "HTTP GET query string parameters parsed in do_GET (notably `id`, and also `comment`)",
+        "source_file": "dsvw.py",
+        "sink": "cursor.execute() called with SQL built by string concatenation/interpolation, e.g. \"SELECT id, username, name, surname FROM users WHERE id=\" + params[\"id\"] and \"INSERT INTO comments VALUES(NULL, '%s', '%s')\" % (params[\"comment\"], ...)",
+        "sink_file": "dsvw.py",
+        "data_flow": [
+          "dsvw.py:do_GET \u2014 self.path split and regex-parsed into params dict of URL-decoded query values",
+          "dsvw.py:do_GET \u2014 params['id'] / params['comment'] concatenated directly into SQL text",
+          "dsvw.py:cursor.execute \u2014 unparameterized query sent to sqlite3"
+        ],
+        "evidence": "do_GET builds its `params` dict straight from the raw, URL-decoded query string with no sanitization, then concatenates params['id'] into a SELECT and params['comment'] into an INSERT before passing the resulting string to cursor.execute(). Both are textbook string-built SQL with attacker-controlled input and no parameterization, so an input like ?id=1 UNION SELECT ... (or a quote-breaking comment value) rewrites the query. The scanner's line reference points at one of these two concatenated execute() calls in do_GET; either way the pattern is confirmed by the surrounding code.",
+        "protection_found": "None \u2014 no parameterized/bound query, no input validation, no escaping, and no authentication/authorization check on the request path.",
+        "impact": "An unauthenticated remote attacker can inject arbitrary SQL: dump the users table (credentials/PII), bypass any id-based filtering, and use the comment INSERT to store arbitrary rows or further manipulate the comments table. Full read/write access to the SQLite-backed application data."
+      },
+      "explanation": "In dsvw.py, the do_GET handler takes the raw HTTP GET query string and regex-parses each name=value pair into a params dict of URL-decoded values, with no validation or escaping applied at any point. When the request path is \"/\" and an id parameter is present, params[\"id\"] is concatenated directly onto the text of the SQL statement \"SELECT id, username, name, surname FROM users WHERE id=\", and that assembled string is passed to cursor.execute(). The same thing happens on the comment branch: params[\"comment\"] is interpolated into \"INSERT INTO comments VALUES(NULL, '%s', '%s')\" and the resulting string goes to cursor.execute(). The whole flow lives in dsvw.py -- do_GET parses the query, builds the SQL by string concatenation, and calls execute -- so the attacker's bytes are part of the SQL statement text itself rather than data bound to a placeholder.\n\nThe consequence is that the attacker writes the query. Supplying ?id=1 UNION SELECT id, username, name, surname FROM users (or any other table and column list) appends an attacker-chosen SELECT to the legitimate one, so the page returns the contents of the users table -- usernames, real names, surnames, and whatever other credential or PII columns exist in the SQLite database -- through the same HTML table that normally renders a single user. Because the id value lands in an unquoted numeric position, an input like ?id=1 OR 1=1 removes the WHERE filter entirely and dumps every row, and an id value containing a semicolon lets the attacker append further statements for the database to run. On the comment branch the value sits inside a string literal, so a single quote in ?comment=' ends that literal and lets the attacker put arbitrary SQL into the INSERT: they can insert rows of their own choosing into comments, rewrite the values being stored, or close the statement and execute additional SQL against the same database. The request is an ordinary unauthenticated GET, so anyone who can reach the server can do this by sending a crafted URL.",
+      "suggested_fix": "In dsvw.py's do_GET, replace both string-built statements with parameterized SQL: cursor.execute(\"SELECT id, username, name, surname FROM users WHERE id=?\", (params[\"id\"],)) and cursor.execute(\"INSERT INTO comments VALUES(NULL, ?, ?)\", (params[\"comment\"], time.ctime())), passing the untrusted values only as bind parameters so sqlite3 handles quoting. If the id is intended to be numeric, additionally cast/allowlist it (e.g. int(params[\"id\"]) with a 400 on ValueError) before binding, since parameterization fixes injection but not type semantics. The fix belongs in dsvw.py at the cursor.execute call sites in do_GET, not in the query-string parsing code."
+    },
+    {
+      "id": "VULN-001",
+      "finding": {
+        "id": "F-001",
+        "file": "dsvw.py",
+        "line": 22,
+        "rule_id": "app.rules.semgrep.python-sqli-concat",
+        "vulnerability_type": "SQL Injection",
+        "scanner_severity": "WARNING",
+        "message": "A SQL statement built by string concatenation or interpolation reaches a database execute() call. If any part of that string is attacker-controlled the query can be rewritten. Use a parameterized query instead.",
+        "code_snippet": "            if path == '/':\n                if \"id\" in params:\n                    cursor.execute(\"SELECT id, username, name, surname FROM users WHERE id=\" + params[\"id\"])\n                    content += \"<div><span>Result(s):</span></div><table><thead><tr><th>id</th><th>username</th><th>name</th><th>surname</th></tr></thead>%s</table>%s\" % (\"\".join(\"<tr>%s</tr>\" % \"\".join(\"<td>%s</td>\" % (\"-\" if _ is None else _) for _ in row) for row in cursor.fetchall()), HTML_POSTFIX)\n                elif \"v\" in params:"
+      },
+      "analysis": {
+        "vulnerability_type": "SQL Injection",
+        "status": "Likely Vulnerable",
+        "severity": "High",
+        "confidence": "High",
+        "source": "HTTP GET query string parameter 'id' (self.path parsed into params)",
+        "source_file": "dsvw.py",
+        "sink": "cursor.execute(\"SELECT id, username, name, surname FROM users WHERE id=\" + params[\"id\"])",
+        "sink_file": "dsvw.py:22",
+        "data_flow": [
+          "dsvw.py:do_GET self.path (raw request URL)",
+          "dsvw.py: query string split and params dict built via re.finditer/urllib.parse.unquote",
+          "dsvw.py:22 string concatenation into SQL",
+          "dsvw.py:22 cursor.execute"
+        ],
+        "evidence": "The 'id' query parameter is extracted straight from the attacker-controllable request path and concatenated into the SQL text passed to cursor.execute() with no quoting or parameter binding; the same function also concatenates params['comment'] into an INSERT statement. Because the request URL is fully attacker-controlled, the WHERE clause can be rewritten (e.g. '?id=1 OR 1=1' or UNION-based extraction).",
+        "protection_found": "None - no parameterization, escaping, type coercion/regex validation of params['id'], or authorization check occurs before execute().",
+        "impact": "An attacker can rewrite the query against the SQLite backend to bypass the id filter and dump arbitrary rows from users and other tables (credentials/usernames/names), and the companion INSERT via the 'comment' parameter allows injecting/altering stored data."
+      },
+      "explanation": "In dsvw.py, the do_GET handler takes the raw request URL (self.path), splits off the query string, and builds the params dictionary by matching parameter names with re.finditer and decoding each value with urllib.parse.unquote. The value of the 'id' parameter is then copied verbatim into a SQL string with simple concatenation \u2014 \"SELECT id, username, name, surname FROM users WHERE id=\" + params[\"id\"] \u2014 and that finished string is passed straight to cursor.execute at line 22. Nothing between the URL and the database call inspects the value, quotes it, or binds it as a parameter, so the text the attacker typed in the query string is treated as part of the SQL statement itself. The companion branch in the same function does the same thing with params[\"comment\"], pasting it into an INSERT INTO comments statement.\n\nBecause the attacker controls the whole tail of the WHERE clause, they can supply something like ?id=0 OR 1=1 to make the filter match every row, and the page will render the full users table back to them \u2014 usernames, real names, and surnames. They can also use UNION-based payloads such as ?id=0 UNION SELECT id, username, password, ... FROM ... to read columns and tables the query was never meant to return, harvesting credentials or any other stored data reachable through that SQLite connection. The INSERT path is just as exposed: a crafted 'comment' value can close the string literal early and append its own SQL, letting the attacker write arbitrary rows or otherwise alter what gets stored in the database, so the injection is both a read and a write primitive.",
+      "suggested_fix": "In dsvw.py, replace the string-concatenated execute() at line 22 with a parameterized query: cursor.execute(\"SELECT id, username, name, surname FROM users WHERE id=?\", (params[\"id\"],)), letting SQLite bind the value rather than interpolating it into the SQL text. Apply the same fix to the companion INSERT in the 'comment' branch, using placeholders and passing (params[\"comment\"], time.ctime()) as the parameter tuple. If params['id'] must be numeric, additionally coerce it with int() inside the same file before binding, but parameterization is the actual fix, not validation alone."
+    },
+    {
+      "id": "VULN-002",
+      "finding": {
+        "id": "F-002",
+        "file": "dsvw.py",
+        "line": 42,
+        "rule_id": "app.rules.semgrep.python-sqli-concat",
+        "vulnerability_type": "SQL Injection",
+        "scanner_severity": "WARNING",
+        "message": "A SQL statement built by string concatenation or interpolation reaches a database execute() call. If any part of that string is attacker-controlled the query can be rewritten. Use a parameterized query instead.",
+        "code_snippet": "                elif \"comment\" in params or re.search(r\"(?:\\A|[?&])comment=(?:&|\\Z)\", query):\n                    if \"comment\" in params:\n                        cursor.execute(\"INSERT INTO comments VALUES(NULL, '%s', '%s')\" % (params[\"comment\"], time.ctime()))\n                        content += \"Thank you for leaving the comment. Please click <a href=\\\"/?comment=\\\">here</a> to see all comments%s\" % HTML_POSTFIX\n                    else:"
+      },
+      "analysis": {
+        "vulnerability_type": "SQL Injection",
+        "status": "Likely Vulnerable",
+        "severity": "High",
+        "confidence": "High",
+        "source": "HTTP GET query-string parameter 'id' (and 'comment') parsed from self.path",
+        "source_file": "dsvw.py",
+        "sink": "cursor.execute(\"SELECT id, username, name, surname FROM users WHERE id=\" + params[\"id\"], and cursor.execute(\"INSERT INTO comments VALUES(NULL, '%s', '%s')\" % ...)",
+        "sink_file": "dsvw.py",
+        "data_flow": [
+          "dsvw.py -> do_GET parses self.path query string into params dict via regex/unquote",
+          "dsvw.py -> params[\"id\"] concatenated into SQL string passed to cursor.execute"
+        ],
+        "evidence": "params is built directly from the raw request query string with no sanitisation, and params[\"id\"] is concatenated verbatim into the SQL text handed to cursor.execute (the 'comment' INSERT uses %-interpolation of params[\"comment\"] similarly). No parameter binding, escaping, allow-listing or authorization guard is applied on the path.",
+        "protection_found": "None. The query is built by string concatenation/interpolation; sqlite3 parameter substitution ('?') is available but not used, and there is no validation or auth check before execute().",
+        "impact": "An attacker can rewrite the query via crafted id (e.g. /?id=1 UNION SELECT ... / OR 1=1) to read arbitrary rows from the SQLite database (users, comments), and via the comment parameter inject additional SQL statements/expressions, leading to full database disclosure and potential data tampering."
+      },
+      "explanation": "When a request comes in, dsvw.py's do_GET method splits self.path on the '?' and runs a regex over the raw query string to build the params dict, unquoting each value with urllib.parse.unquote. If the key 'id' is present, that raw string is concatenated directly onto the SQL text \u2014 \"SELECT id, username, name, surname FROM users WHERE id=\" + params[\"id\"] \u2014 and the finished string is handed to cursor.execute. The 'comment' parameter travels the same route: it is interpolated into an INSERT statement with % formatting before being passed to cursor.execute. Both values go straight from the query string into the SQL engine with no transformation in between.\n\nBecause the value becomes part of the SQL grammar rather than a piece of data, an attacker controls the structure of the statement. Sending /?id=1 OR 1=1 makes the WHERE clause always true so every row in the users table is returned in the page; /?id=0 UNION SELECT id, username, password, ... FROM ... lets them append a second query and pull columns the original query never selected, which means they can read the whole SQLite database \u2014 every user, every comment, including credential columns. On the comment side, a value containing a single quote closes the string literal early and lets the attacker append their own SQL, so they can insert or alter rows, or tack further statements and expressions onto the INSERT. In short, a crafted URL gives an unauthenticated visitor read access to all stored data and a path to modifying it.",
+      "suggested_fix": "In dsvw.py do_GET, replace the string-concatenated execute calls with sqlite3 parameter binding: cursor.execute(\"SELECT id, username, name, surname FROM users WHERE id=?\", (params[\"id\"],)) and cursor.execute(\"INSERT INTO comments VALUES(NULL, ?, ?)\", (params[\"comment\"], time.ctime())), so the driver escapes values instead of interpolating them into SQL text. The fix belongs entirely in the flagged file (dsvw.py, around line 42); no separate validation/escaping layer is needed since parameterization removes the injection at the sink itself\u2014optionally also cast id to int if the column is numeric."
+    }
+  ]
+}
