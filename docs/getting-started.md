@@ -31,9 +31,14 @@ connect, add `MCP_HOST=0.0.0.0` to `.env`. Always set `MCP_API_KEY` when you do 
 
 ## 2. Install the extension
 
-Install the packaged extension from a terminal:
+Build the extension from [DansPK/nokran-poc](https://github.com/DansPK/nokran-poc) and install
+it:
 
 ```sh
+git clone https://github.com/DansPK/nokran-poc.git
+cd nokran-poc
+npm install
+npm run package
 code --install-extension nokran-0.4.0.vsix
 ```
 

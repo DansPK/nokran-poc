@@ -6,8 +6,9 @@ reach the database?", and Nokran answers in the chat. Scan results appear as fin
 can click to jump straight to the code.
 
 Nokran does not analyze code itself. It is an [MCP](https://modelcontextprotocol.io) client
-that talks to the **source-code-vuln-poc** harness, which runs Semgrep and an AI model to judge
-each finding. Nokran connects to the harness over Streamable HTTP, so the harness can run on
+that talks to the **source-code-vuln-poc** harness
+([DansPK/source-code-analysis-poc](https://github.com/DansPK/source-code-analysis-poc)), which
+runs Semgrep and an AI model to judge each finding. Nokran connects to the harness over Streamable HTTP, so the harness can run on
 your own machine or on a shared server.
 
 ## Features
@@ -29,25 +30,35 @@ your own machine or on a shared server.
 ## Requirements
 
 - VS Code 1.90 or later.
-- A running **source-code-vuln-poc** MCP server (`scan-mcp`), with an LLM key configured in
-  its `.env` file. See [Getting started](docs/getting-started.md).
+- A running **source-code-vuln-poc** MCP server (`scan-mcp`) from
+  [DansPK/source-code-analysis-poc](https://github.com/DansPK/source-code-analysis-poc), with an
+  LLM key configured in its `.env` file. See [Getting started](docs/getting-started.md).
 
 ## Quick start
 
-1. Start the server in the harness folder:
+1. Get the harness and start its server:
    ```sh
+   git clone https://github.com/DansPK/source-code-analysis-poc.git
+   cd source-code-analysis-poc
    uv sync
+   cp .env.example .env                                  # then set LLM_API_KEY
    echo "MCP_API_KEY=$(openssl rand -hex 32)" >> .env
    uv run scan-mcp
    ```
-2. Install the extension:
+2. Build and install the extension from this repository:
    ```sh
+   npm install
+   npm run package
    code --install-extension nokran-0.4.0.vsix
    ```
 3. In VS Code settings, search for **Nokran** and paste the server's `MCP_API_KEY` into
    **Api Key**.
 4. Open a project folder, click the Nokran icon in the activity bar, and type
    `scan this code for me`.
+
+To see it find something, open one of the harness's intentionally vulnerable samples,
+`tests/vulnerable_samples/flask_app`, `spring_app` or `express_app`, and scan it. Each has a
+SQL injection that should be reported as **Likely Vulnerable**.
 
 ## Using the chat
 

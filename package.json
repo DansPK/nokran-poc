@@ -5,6 +5,14 @@
   "version": "0.4.0",
   "publisher": "local",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DansPK/nokran-poc.git"
+  },
+  "bugs": {
+    "url": "https://github.com/DansPK/nokran-poc/issues"
+  },
+  "homepage": "https://github.com/DansPK/nokran-poc#readme",
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -132,7 +140,7 @@
     "watch": "node esbuild.mjs --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "package": "npm run build -- --production && vsce package --no-dependencies --no-rewrite-relative-links",
+    "package": "npm run build -- --production && vsce package --no-dependencies",
     "vscode:prepublish": "node esbuild.mjs --production"
   },
   "dependencies": {
